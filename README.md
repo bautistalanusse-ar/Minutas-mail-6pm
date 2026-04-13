@@ -1,12 +1,15 @@
 # Automatización Minutas Diarias — Nubceo
 
-Digest diario de reuniones de Google Meet enviado a `bautista.lanusse@nubceo.com` a las 18:00 ART, construido en Make.com.
+Digest diario de reuniones **con clientes** enviado a `bautista.lanusse@nubceo.com` a las **18:00 ART**.  
+Solo se envía si hubo al menos una reunión con cliente en el día.
 
 ## Contexto
 
 - **Empresa vendedora:** Nubceo (dominio `@nubceo.com`)
-- Google Meet genera automáticamente emails desde `gemini-notes@google.com` con un link a un Google Doc que contiene el resumen + transcripción de cada reunión
+- Google Meet genera automáticamente emails desde `gemini-notes@google.com` con un link a un Google Doc con el resumen + transcripción
+- Se filtra **únicamente** reuniones donde `agenda.virtual@nubceo.com` está copiada (TO o CC) → son las reuniones con clientes
 - Se envía **un solo email por día** con **todas las reuniones del día** concatenadas
+- **Si no hay reuniones con clientes en el día, no se envía ningún email**
 
 ---
 
@@ -28,12 +31,15 @@ Digest diario de reuniones de Google Meet enviado a `bautista.lanusse@nubceo.com
 ```json
 {
   "connectionId": 8153044,
-  "q": "from:gemini-notes@google.com newer_than:1d",
+  "q": "from:gemini-notes@google.com newer_than:1d (to:agenda.virtual@nubceo.com OR cc:agenda.virtual@nubceo.com)",
   "format": "full",
   "limit": 20,
   "filterType": "gmailSearch"
 }
 ```
+
+> Filtra solo reuniones donde `agenda.virtual@nubceo.com` está presente → reuniones con clientes.  
+> Si no hay resultados, el aggregator queda vacío y el email no se envía.
 
 ### Módulo 2 — Google Docs (`google-docs:getADocument v1`)
 
@@ -63,7 +69,7 @@ Digest diario de reuniones de Google Meet enviado a `bautista.lanusse@nubceo.com
 }
 ```
 
-> Para leer el array después: `join(map(4.array; "value"); "")` — NO `join(4.array; "")` porque BasicAggregator guarda objetos `{value: "..."}`, no strings directos.
+> Para leer el array después: `join(map(4.array; "value"); "")` — NO `join(4.array; "")`.
 
 ### Módulo 5 — Send Email (`google-email:sendAnEmail v4`)
 
@@ -76,9 +82,9 @@ Digest diario de reuniones de Google Meet enviado a `bautista.lanusse@nubceo.com
 }
 ```
 
-> **CRÍTICO:** `bodyType` DEBE ser `"rawHtml"` — sin esto el mail llega completamente vacío.  
-> El campo del cuerpo se llama `"content"` (no `"html"`).  
-> Filtro antes de este módulo: `join(map(4.array; "value"); "") != ""` (no enviar si no hubo reuniones).
+**Filtro antes de módulo 5:** `join(map(4.array; "value"); "") != ""`
+
+> Si el módulo 1 no encontró emails (no hubo reuniones con clientes), el aggregator produce un array vacío → el filtro bloquea el envío. No se manda ningún email.
 
 ---
 
@@ -109,8 +115,6 @@ Digest diario de reuniones de Google Meet enviado a `bautista.lanusse@nubceo.com
 
 ## Prompt Gemini (Módulo 3)
 
-El prompt debe generar un card HTML por reunión.
-
 **Instrucciones para Gemini:**
 - Devolver ÚNICAMENTE HTML válido empezando con `<div` y terminando con `</div>`
 - Sin markdown, sin backticks, sin texto antes ni después
@@ -137,9 +141,17 @@ El prompt debe generar un card HTML por reunión.
 
 ---
 
-## Gotchas Críticos
+## Lógica de activación
 
-Errores que ya ocurrieron — no repetir:
+```
+¿Hay emails de gemini-notes con agenda.virtual@nubceo.com en TO/CC hoy?
+  ├── SÍ → procesar cada reunión con Gemini → enviar digest a las 18:00
+  └── NO → no ejecutar módulos 2-4, aggregator vacío, filtro bloquea envío → silencio
+```
+
+---
+
+## Gotchas Críticos
 
 1. **`bodyType: "rawHtml"` ES OBLIGATORIO** en `sendAnEmail v4` — sin esto el mail llega vacío.
 2. **`join(map(4.array; "value"); "")`** — NO usar `join(4.array; "")` que devuelve `{object}{object}`.
@@ -147,6 +159,7 @@ Errores que ya ocurrieron — no repetir:
 4. **Si Gemini devuelve \`\`\`html...\`\`\`** usar `replace(replace(x; "```html"; ""); "```"; "")` en el aggregator.
 5. **Si el escenario queda `isinvalid:true`** después de un error en runtime, hay que crear uno nuevo (no se puede recuperar).
 6. **El campo de texto del Google Doc está en `2.text`** (no `2.body` ni `2.content`).
+7. **Filtro de reuniones con clientes:** la query Gmail usa `(to:agenda.virtual@nubceo.com OR cc:agenda.virtual@nubceo.com)` — sin esto aparecen reuniones internas.
 
 ---
 
