@@ -7,7 +7,7 @@ Solo se envía si hubo al menos una reunión con cliente en el día.
 
 - **Empresa vendedora:** Nubceo (dominio `@nubceo.com`)
 - Google Meet genera automáticamente emails desde `gemini-notes@google.com` con un link a un Google Doc con el resumen + transcripción
-- Se filtra **únicamente** reuniones donde `agenda.virtual@nubceo.com` está copiada (TO o CC) → son las reuniones con clientes
+- Se filtra **únicamente** reuniones donde `agenda.virtual@nubceo.com` aparece dentro del contenido del Google Doc (indica reunión con cliente)
 - Se envía **un solo email por día** con **todas las reuniones del día** concatenadas
 - **Si no hay reuniones con clientes en el día, no se envía ningún email**
 
@@ -18,8 +18,8 @@ Solo se envía si hubo al menos una reunión con cliente en el día.
 | Variable | Valor |
 |---|---|
 | Team ID | `1201957` |
-| Gmail connection ID | `8153044` (google-email) |
-| Google Docs connection ID | `7470589` (google) |
+| Gmail connection ID | `8153044` — `bautista.lanusse@nubceo.com` |
+| Google Docs connection ID | `7470589` — `bautista.lanusse@nubceo.com` |
 | Escenario ID | `4666085` |
 
 ---
@@ -31,15 +31,14 @@ Solo se envía si hubo al menos una reunión con cliente en el día.
 ```json
 {
   "connectionId": 8153044,
-  "q": "from:gemini-notes@google.com newer_than:1d (to:agenda.virtual@nubceo.com OR cc:agenda.virtual@nubceo.com)",
+  "q": "from:gemini-notes@google.com newer_than:1d",
   "format": "full",
   "limit": 20,
   "filterType": "gmailSearch"
 }
 ```
 
-> Filtra solo reuniones donde `agenda.virtual@nubceo.com` está presente → reuniones con clientes.  
-> Si no hay resultados, el aggregator queda vacío y el email no se envía.
+> Busca todos los emails de Gemini Notes del día. El filtro real de "cliente vs interno" ocurre en el módulo 3.
 
 ### Módulo 2 — Google Docs (`google-docs:getADocument v1`)
 
@@ -55,7 +54,11 @@ Solo se envía si hubo al menos una reunión con cliente en el día.
 
 > El texto limpio del doc está en `2.text`
 
-### Módulo 3 — Gemini AI (`gemini-ai:simpleTextPrompt v1`)
+### Módulo 3 — Gemini AI (`gemini-ai:simpleTextPrompt v1`) — con filtro antes
+
+**Filtro:** `2.text` contiene `agenda.virtual@nubceo.com`
+
+> Si el doc NO menciona `agenda.virtual@nubceo.com` → la reunión es interna → se saltea. Solo pasan reuniones con clientes.
 
 - **model:** `gemini-2.5-flash`
 - **Prompt:** ver sección [Prompt Gemini](#prompt-gemini) abajo
@@ -84,7 +87,7 @@ Solo se envía si hubo al menos una reunión con cliente en el día.
 
 **Filtro antes de módulo 5:** `join(map(4.array; "value"); "") != ""`
 
-> Si el módulo 1 no encontró emails (no hubo reuniones con clientes), el aggregator produce un array vacío → el filtro bloquea el envío. No se manda ningún email.
+> Si ninguna reunión del día pasó el filtro de cliente, el aggregator queda vacío → no se envía nada.
 
 ---
 
@@ -144,9 +147,15 @@ Solo se envía si hubo al menos una reunión con cliente en el día.
 ## Lógica de activación
 
 ```
-¿Hay emails de gemini-notes con agenda.virtual@nubceo.com en TO/CC hoy?
-  ├── SÍ → procesar cada reunión con Gemini → enviar digest a las 18:00
-  └── NO → no ejecutar módulos 2-4, aggregator vacío, filtro bloquea envío → silencio
+Cada día a las 18:00 ART:
+  Para cada email de gemini-notes del día:
+    └── Abre el Google Doc
+        ├── ¿El doc menciona agenda.virtual@nubceo.com?
+        │     SÍ → procesar con Gemini → agregar al digest
+        │     NO → saltear (reunión interna)
+  ¿El digest tiene al menos una reunión?
+    ├── SÍ → enviar email
+    └── NO → silencio, no se envía nada
 ```
 
 ---
@@ -155,11 +164,11 @@ Solo se envía si hubo al menos una reunión con cliente en el día.
 
 1. **`bodyType: "rawHtml"` ES OBLIGATORIO** en `sendAnEmail v4` — sin esto el mail llega vacío.
 2. **`join(map(4.array; "value"); "")`** — NO usar `join(4.array; "")` que devuelve `{object}{object}`.
-3. **Doc ID extraction:** usar `first(split(...; "/"))` NO `regex replace("/.*"; "")` — el punto en Make.com no matchea `\n`.
+3. **Doc ID extraction:** usar `first(split(last(split(1.htmlBody; "docs.google.com/document/d/")); "/"))`.
 4. **Si Gemini devuelve \`\`\`html...\`\`\`** usar `replace(replace(x; "```html"; ""); "```"; "")` en el aggregator.
-5. **Si el escenario queda `isinvalid:true`** después de un error en runtime, hay que crear uno nuevo (no se puede recuperar).
+5. **Si el escenario queda `isinvalid:true`** después de un error en runtime, hay que crear uno nuevo.
 6. **El campo de texto del Google Doc está en `2.text`** (no `2.body` ni `2.content`).
-7. **Filtro de reuniones con clientes:** la query Gmail usa `(to:agenda.virtual@nubceo.com OR cc:agenda.virtual@nubceo.com)` — sin esto aparecen reuniones internas.
+7. **El filtro de cliente NO va en Gmail** — va después del módulo Google Docs, chequeando `2.text contains "agenda.virtual@nubceo.com"`. Gemini Notes envía emails individuales a cada participante, por lo que `agenda.virtual` nunca aparece en los headers del email en el inbox de bautista.
 
 ---
 
