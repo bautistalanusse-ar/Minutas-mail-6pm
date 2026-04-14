@@ -38,9 +38,11 @@ Solo se envía si hubo al menos una reunión con cliente en el día.
 }
 ```
 
-> Busca todos los emails de Gemini Notes del día. El filtro real de "cliente vs interno" ocurre en el módulo 3.
+### Módulo 2 — Google Docs (`google-docs:getADocument v1`) — con filtro antes
 
-### Módulo 2 — Google Docs (`google-docs:getADocument v1`)
+**Filtro:** `1.htmlBody` contiene `docs.google.com/document/d/`
+
+> Previene el error `[404] File not found: export.` que ocurre cuando algunos emails de Gemini Notes no incluyen un link directo al doc (usan redirect o formato distinto). Sin este filtro el escenario falla.
 
 ```json
 {
@@ -87,7 +89,7 @@ Solo se envía si hubo al menos una reunión con cliente en el día.
 
 **Filtro antes de módulo 5:** `join(map(4.array; "value"); "") != ""`
 
-> Si ninguna reunión del día pasó el filtro de cliente, el aggregator queda vacío → no se envía nada.
+> Si ninguna reunión pasó el filtro de cliente, el aggregator queda vacío → no se envía nada.
 
 ---
 
@@ -97,16 +99,13 @@ Solo se envía si hubo al menos una reunión con cliente en el día.
 <!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"></head>
 <body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;">
 <div style="max-width:660px;margin:0 auto;padding:20px 12px;">
-  <!-- HEADER -->
   <div style="background:linear-gradient(135deg,#0f172a,#1e3a5f);border-radius:12px 12px 0 0;padding:22px 26px;">
     <h1 style="margin:0 0 4px;font-size:18px;font-weight:800;color:#fff;">
       <span style="color:#38bdf8;">Nubceo</span> · Reuniones
     </h1>
     <p style="margin:0;font-size:12px;color:#94a3b8;">{{formatDate(now; "dddd D [de] MMMM [de] YYYY")}}</p>
   </div>
-  <!-- CARDS DE REUNIONES -->
   <div style="padding:10px 0;">{{join(map(4.array; "value"); "")}}</div>
-  <!-- FOOTER -->
   <div style="background:#0f172a;border-radius:0 0 12px 12px;padding:12px 22px;text-align:center;">
     <p style="margin:0;font-size:10px;color:#475569;">Generado automáticamente · Google Meet + Gemini Notes</p>
   </div>
@@ -128,19 +127,16 @@ Solo se envía si hubo al menos una reunión con cliente en el día.
 
 1. **CABECERA:** gradient dark header con el nombre de la reunión (`1.subject`)
 2. **RESUMEN:** máximo 2 oraciones. Qué se trató y cómo quedó el deal. Sin introducciones.
-3. **TIEMPO DE HABLA:** leer timestamps del doc (formato `0:01:23 Nombre:`), calcular % por speaker (cap 90s por intervención). Nota `* estimado`. Si no hay timestamps: `"Sin transcripción disponible"`.
+3. **TIEMPO DE HABLA:** timestamps `0:01:23 Nombre:`, calcular % por speaker (cap 90s). Si no hay: `"Sin transcripción disponible"`.
 4. **PREGUNTAS CLAVE:** las 3 más importantes que Nubceo le hizo al cliente. Sin timestamps.
-5. **DOLORES:** los 3 principales — qué quiere el cliente que NO puede hacer sin Nubceo. Una línea cada uno. Sin timestamps.
-6. **PRÓXIMOS PASOS:** tabla con columnas `Acción / Quien / Fecha`. Fecha solo si se mencionó explícitamente en la reunión, sino `"A definir"`. Sin timestamps.
+5. **DOLORES:** los 3 principales — qué quiere el cliente que NO puede hacer sin Nubceo. Una línea cada uno.
+6. **PRÓXIMOS PASOS:** tabla `Acción / Quien / Fecha`. Fecha solo si se mencionó explícitamente, sino `"A definir"`.
 
 ---
 
 ## Scheduling
 
-- **type:** `daily`
-- **time:** `18:00`
-
-> Make.com interpreta `"18:00"` como ART (UTC-3) → ejecuta a las 21:00 UTC
+- **type:** `daily` · **time:** `18:00` ART → 21:00 UTC
 
 ---
 
@@ -149,13 +145,15 @@ Solo se envía si hubo al menos una reunión con cliente en el día.
 ```
 Cada día a las 18:00 ART:
   Para cada email de gemini-notes del día:
-    └── Abre el Google Doc
-        ├── ¿El doc menciona agenda.virtual@nubceo.com?
-        │     SÍ → procesar con Gemini → agregar al digest
-        │     NO → saltear (reunión interna)
+    ├── ¿El HTML del email contiene "docs.google.com/document/d/"?
+    │     NO → saltear (previene error 404)
+    │     SÍ → abrir Google Doc
+    │           ├── ¿El doc menciona "agenda.virtual@nubceo.com"?
+    │           │     SÍ → procesar con Gemini → agregar al digest
+    │           │     NO → saltear (reunión interna)
   ¿El digest tiene al menos una reunión?
     ├── SÍ → enviar email
-    └── NO → silencio, no se envía nada
+    └── NO → silencio
 ```
 
 ---
@@ -163,15 +161,10 @@ Cada día a las 18:00 ART:
 ## Gotchas Críticos
 
 1. **`bodyType: "rawHtml"` ES OBLIGATORIO** en `sendAnEmail v4` — sin esto el mail llega vacío.
-2. **`join(map(4.array; "value"); "")`** — NO usar `join(4.array; "")` que devuelve `{object}{object}`.
-3. **Doc ID extraction:** usar `first(split(last(split(1.htmlBody; "docs.google.com/document/d/")); "/"))`.
-4. **Si Gemini devuelve \`\`\`html...\`\`\`** usar `replace(replace(x; "```html"; ""); "```"; "")` en el aggregator.
-5. **Si el escenario queda `isinvalid:true`** después de un error en runtime, hay que crear uno nuevo.
-6. **El campo de texto del Google Doc está en `2.text`** (no `2.body` ni `2.content`).
-7. **El filtro de cliente NO va en Gmail** — va después del módulo Google Docs, chequeando `2.text contains "agenda.virtual@nubceo.com"`. Gemini Notes envía emails individuales a cada participante, por lo que `agenda.virtual` nunca aparece en los headers del email en el inbox de bautista.
-
----
-
-## Reconstrucción desde cero
-
-Con Claude Code + MCP de Make.com, usar este README como prompt completo para reconstruir toda la automatización sin reproducir los bugs listados arriba.
+2. **`join(map(4.array; "value"); "")`** — NO usar `join(4.array; "")`.
+3. **Filtro en módulo 2 obligatorio:** verificar que `1.htmlBody contains "docs.google.com/document/d/"` antes de intentar extraer el doc ID. Sin este filtro ocurre `[404] File not found: export.` cuando el email tiene una URL de redirect en lugar del link directo.
+4. **Doc ID extraction:** `first(split(last(split(1.htmlBody; "docs.google.com/document/d/")); "/"))`.
+5. **Si Gemini devuelve \`\`\`html...\`\`\`** usar `replace(replace(x; "```html"; ""); "```"; "")` en el aggregator.
+6. **Si el escenario queda `isinvalid:true`** después de un error en runtime, hay que crear uno nuevo.
+7. **El campo de texto del Google Doc está en `2.text`** (no `2.body` ni `2.content`).
+8. **El filtro de cliente NO va en Gmail** — va después de leer el doc (`2.text contains "agenda.virtual@nubceo.com"`). Gemini Notes envía emails individuales a cada participante, por lo que `agenda.virtual` nunca aparece en headers del email.
