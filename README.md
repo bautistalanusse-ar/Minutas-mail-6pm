@@ -32,9 +32,15 @@ Si no hubo reuniones en el día, no se envía nada.
 
 ### Módulo 2 — Google Docs (`google-docs:getADocument v1`) — con filtro antes
 
-**Filtro:** `1.htmlBody` contiene `docs.google.com/document/d/`
+**Filtro:** `Solo reuniones con agenda.virtual` (AND de dos condiciones)
 
-> Previene el error `[404] File not found: export.` cuando algún email de Gemini no incluye link directo al doc.
+| # | Campo | Operador | Valor |
+|---|---|---|---|
+| 1 | `{{1.htmlBody}}` | contains | `agenda.virtual@nubceo.com` |
+| 2 | `{{1.htmlBody}}` | contains | `docs.google.com/document/d/` |
+
+> Condición 1: filtra solo emails de reuniones con clientes (el CC de Gemini Notes incluye `agenda.virtual@nubceo.com`).  
+> Condición 2: previene el error `[404] File not found: export.` cuando algún email de Gemini no incluye link directo al doc.
 
 ```json
 {
@@ -148,7 +154,7 @@ Así queda registro de todas las notas aunque la reunión haya cortado tarde. Ca
 
 1. **`bodyType: "rawHtml"` ES OBLIGATORIO** en `sendAnEmail v4` — sin esto el mail llega vacío.
 2. **`join(map(4.array; "value"); "")`** — NO usar `join(4.array; "")`.
-3. **Filtro en módulo 2 obligatorio:** `1.htmlBody contains "docs.google.com/document/d/"` — previene `[404] File not found: export.`
+3. **Filtro en módulo 2 obligatorio (AND):** `agenda.virtual@nubceo.com` (filtra solo reuniones con clientes) + `docs.google.com/document/d/` (previene `[404] File not found: export.`)
 4. **Doc ID:** `first(split(last(split(1.htmlBody; "docs.google.com/document/d/")); "/"))`.
 5. **Si Gemini devuelve \`\`\`html...\`\`\`** → `replace(replace(x; "```html"; ""); "```"; "")` en el aggregator.
 6. **Si el escenario queda `isinvalid:true`** → crear uno nuevo, no se puede recuperar.
