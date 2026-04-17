@@ -106,9 +106,11 @@ Si no hubo reuniones en el día, no se envía nada.
 - Devolver ÚNICAMENTE HTML empezando con `<div` y terminando con `</div>`
 - Sin markdown, sin backticks, estilos inline en todo
 - Contenido: `{{substring(2.text; 0; 28000)}}`
+- Fecha del email: `{{formatDate(1.date; "DD/MM/YYYY")}}`
+- Fecha de hoy: `{{formatDate(now; "DD/MM/YYYY")}}`
 
 **Secciones del card:**
-1. **CABECERA:** dark gradient + nombre de reunión (`1.subject`)
+1. **CABECERA:** dark gradient + nombre de reunión (`1.subject`). Si la fecha del email es distinta a la fecha de hoy, agregar debajo del nombre un badge: `<span style="background:#f59e0b;color:#000;font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;letter-spacing:0.5px;">📅 Reunión del {{formatDate(1.date; "DD/MM/YYYY")}} — día anterior</span>`
 2. **RESUMEN:** máx. 2 oraciones, qué se trató y cómo quedó el deal
 3. **TIEMPO DE HABLA:** timestamps `0:01:23 Nombre:`, % por speaker (cap 90s). Si no hay: "Sin transcripción disponible"
 4. **PREGUNTAS CLAVE:** las 3 más importantes que Nubceo le hizo al cliente
@@ -121,6 +123,24 @@ Si no hubo reuniones en el día, no se envía nada.
 
 - **Todos los días a las 18:00 ART** (= 21:00 UTC)
 - Si no hay emails de Gemini Notes ese día → aggregator vacío → no se envía nada
+
+---
+
+## Comportamiento — Reuniones post-18hs
+
+El escenario corre a las 18:00 ART. Las reuniones que **terminan después de esa hora** generan el email de Gemini Notes cuando el escenario ya corrió, por lo que aparecen en el **digest del día siguiente**.
+
+Para identificarlas claramente, el Módulo 3 recibe:
+- `FECHA DEL EMAIL: {{formatDate(1.date; "DD/MM/YYYY")}}`
+- `FECHA DE HOY: {{formatDate(now; "DD/MM/YYYY")}}`
+
+Si las fechas difieren, Gemini agrega en la cabecera del card un badge amarillo:
+
+```
+📅 Reunión del [DD/MM/YYYY] — día anterior
+```
+
+Así queda registro de todas las notas aunque la reunión haya cortado tarde. Caso que originó este cambio: reunión con Dagma (16/04/2026).
 
 ---
 
