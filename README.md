@@ -1,6 +1,6 @@
 # Automatización Minutas Diarias — Nubceo
 
-Digest diario de **reuniones con clientes** enviado a `bautista.lanusse@nubceo.com` a las **18:00 ART**, todos los días.  
+Digest diario de **reuniones con clientes** enviado a `bautista.lanusse@nubceo.com` a las **18:30 ART**, todos los días.  
 Si no hubo reuniones con clientes ese día, no se envía nada.
 
 ---
@@ -42,7 +42,7 @@ Módulo 5 (Send Email — solo si aggregator no vacío)
 }
 ```
 
-> `newer_than:2d` para capturar reuniones post-18hs que generan el email después del run diario.
+> `newer_than:2d` para capturar reuniones post-18:30hs que generan el email después del run diario.
 
 ### Módulo 6 — Router (`builtin:BasicRouter v1`)
 
@@ -164,14 +164,14 @@ El filtro `formas parte de un grupo que se ha invitado` en ambas rutas garantiza
 
 ## Scheduling
 
-- **Todos los días a las 18:00 ART** (= 21:00 UTC)
+- **Todos los días a las 18:30 ART** (= 21:30 UTC)
 - `newer_than:2d` asegura que reuniones post-18hs del día anterior también aparezcan
 
 ---
 
 ## Comportamiento — Reuniones post-18hs
 
-El escenario corre a las 18:00 ART. Las reuniones que terminan después generan el email de Gemini Notes cuando el escenario ya corrió → aparecen en el **digest del día siguiente** con badge amarillo:
+El escenario corre a las 18:30 ART. Las reuniones que terminan después generan el email de Gemini Notes cuando el escenario ya corrió → aparecen en el **digest del día siguiente** con badge amarillo:
 
 ```
 📅 Reunión del [DD/MM/YYYY] — día anterior
